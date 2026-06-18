@@ -90,6 +90,45 @@ To bound cost and latency, PRs exceeding configurable limits are skipped:
 
 When skipped, the graph posts a "Review skipped: PR too large" comment and ends.
 
+## LLM Concurrency & Rate Limiting
+
+The system uses a `threading.Semaphore` to cap concurrent NVIDIA API calls — essential for avoiding 429 rate limits:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_CONCURRENT_LLM` | `5` | Max concurrent LLM invocations across all file reviews |
+| `MAX_DIFF_CHARS` | `15000` | Max characters per diff sent to the LLM (truncated with warning marker) |
+
+## Diff Pre-processing
+
+Before sending a diff to the LLM, the system:
+
+1. **Strips excess context lines** — only the first 3 unchanged lines around each hunk are kept (reduces token usage ~40%)
+2. **Truncates oversized diffs** — diffs longer than `MAX_DIFF_CHARS` are split into head/tail with a truncation notice
+3. **Preserves `+`/`-` lines** — all added and removed lines are kept in full
+
+## Cost & Token Tracking
+
+Every LLM invocation records prompt and completion tokens from the API response metadata. These are accumulated across all parallel calls and reported:
+
+- **Prompt tokens**: Total input tokens sent to the LLM
+- **Completion tokens**: Total output tokens generated
+- **Total tokens**: Sum of both
+- **Estimated cost**: Computed using NVIDIA AI Endpoints pricing (default $0.10/1M input + $0.10/1M output)
+
+These metrics appear in:
+- The `$GITHUB_STEP_SUMMARY` report in CI
+- Log output in CLI mode
+- LangSmith traces (automatically via `@traceable`)
+
+## Prompt Versioning
+
+Each prompt template includes a `PROMPT_VERSION` constant (e.g. `"1.1"`) embedded in the system instruction sent to the LLM. This allows:
+
+- Identifying which prompt version produced any given review
+- A/B testing prompt iterations
+- Adding the version to LangSmith trace metadata for debugging
+
 ## LangGraph Runtime Configuration
 
 - **RetryPolicy**: 3 attempts globally (1s-30s exponential backoff, jitter). `review` node: 2 attempts only for `ConnectionError`.
@@ -149,7 +188,10 @@ uvicorn api.server:app --reload
 | `AI_TEMPERATURE` | No | `0.2` | LLM temperature |
 | `AI_TOP_P` | No | `1.0` | LLM top-p sampling |
 | `AI_MAX_TOKENS` | No | `1024` | Max completion tokens |
-| `AI_FALLBACK_API_KEY` | No | — | Fallback LLM API key (on ConnectionError) |
+| `AI_FALLBACK_API_KEY` | No | — | Fallback LLM API key (on API error) |
+| `AI_FALLBACK_MODEL` | No | `google/gemma-2-2b-it` | Fallback LLM model |
+| `MAX_CONCURRENT_LLM` | No | `5` | Max concurrent NVIDIA API calls |
+| `MAX_DIFF_CHARS` | No | `15000` | Max diff chars sent to LLM per file |
 | `AI_FALLBACK_MODEL` | No | `google/gemma-2-2b-it` | Fallback LLM model |
 | `LANGSMITH_API_KEY` | No | — | LangSmith tracing |
 | `PR_MAX_FILES` | No | `50` | Max files before PR is skipped as too large |

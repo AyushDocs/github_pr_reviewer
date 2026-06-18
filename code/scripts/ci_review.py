@@ -72,6 +72,10 @@ def _save_cached_result(cache_dir, result):
         "block_review": result.get("block_review", False),
         "review_degraded": result.get("review_degraded", False),
         "injection_detected": result.get("injection_detected", False),
+        "prompt_tokens": result.get("prompt_tokens", 0),
+        "completion_tokens": result.get("completion_tokens", 0),
+        "total_tokens": result.get("total_tokens", 0),
+        "estimated_cost": result.get("estimated_cost", 0.0),
     }
     with open(cache_file, "w") as f:
         json.dump(serializable, f, default=str)
@@ -85,6 +89,10 @@ def _build_summary_report(repo_name, pr_number, result, duration_s):
     review_degraded = result.get("review_degraded", False)
     injection_detected = result.get("injection_detected", False)
     pr_too_large = result.get("pr_too_large", False)
+    prompt_tok = result.get("prompt_tokens", 0)
+    completion_tok = result.get("completion_tokens", 0)
+    total_tok = result.get("total_tokens", 0)
+    cost = result.get("estimated_cost", 0.0)
 
     lines = ["## PR Review Report", ""]
     lines.append(f"- **Repository**: {repo_name}#{pr_number}")
@@ -101,6 +109,9 @@ def _build_summary_report(repo_name, pr_number, result, duration_s):
     lines.append(f"- **Hallucination flags**: {len(hallucination_flags)}")
     lines.append(f"- **Degraded**: {'Yes' if review_degraded else 'No'}")
     lines.append(f"- **Injection detected**: {'Yes' if injection_detected else 'No'}")
+    lines.append(f"- **Tokens**: {total_tok:,} ({prompt_tok:,} in / {completion_tok:,} out)")
+    if cost:
+        lines.append(f"- **Est. cost**: ${cost:.4f}")
 
     if review_degraded:
         lines.append("")

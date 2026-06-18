@@ -1,4 +1,5 @@
 import os
+import threading
 from dotenv import load_dotenv
 from langchain_nvidia_ai_endpoints import ChatNVIDIA, NVIDIAEmbeddings
 
@@ -21,6 +22,14 @@ if not GITHUB_TOKEN:
 AI_FALLBACK_API_KEY = os.getenv("AI_FALLBACK_API_KEY")
 AI_FALLBACK_MODEL = os.getenv("AI_FALLBACK_MODEL", "google/gemma-2-2b-it")
 
+MAX_CONCURRENT_LLM = int(os.getenv("MAX_CONCURRENT_LLM", "5"))
+MAX_DIFF_CHARS = int(os.getenv("MAX_DIFF_CHARS", "15000"))
+
+NVIDIA_PRICE_PER_1M_INPUT = 0.10
+NVIDIA_PRICE_PER_1M_OUTPUT = 0.10
+
+llm_semaphore = threading.Semaphore(MAX_CONCURRENT_LLM)
+
 llm = ChatNVIDIA(
     model=AI_MODEL,
     api_key=AI_API_KEY,
@@ -41,3 +50,27 @@ embeddings = NVIDIAEmbeddings(
     model=AI_EMBEDDING_MODEL,
     api_key=AI_API_KEY,
 )
+
+_token_lock = threading.Lock()
+_token_accumulator = {"prompt": 0, "completion": 0}
+
+
+def record_tokens(prompt_tokens: int, completion_tokens: int):
+    with _token_lock:
+        _token_accumulator["prompt"] += prompt_tokens
+        _token_accumulator["completion"] += completion_tokens
+
+
+def drain_tokens():
+    with _token_lock:
+        val = dict(_token_accumulator)
+        _token_accumulator["prompt"] = 0
+        _token_accumulator["completion"] = 0
+    return val
+
+
+def estimate_cost(prompt_tokens: int, completion_tokens: int) -> float:
+    return (
+        prompt_tokens / 1_000_000 * NVIDIA_PRICE_PER_1M_INPUT
+        + completion_tokens / 1_000_000 * NVIDIA_PRICE_PER_1M_OUTPUT
+    )

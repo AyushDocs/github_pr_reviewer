@@ -1,5 +1,5 @@
 from langsmith import traceable
-from agent.config import llm, fallback_llm
+from agent.config import llm, fallback_llm, llm_semaphore, record_tokens
 from agent.prompts.security import SECURITY_PROMPT, SECURITY_FALLBACK_PROMPT
 from agent.retriever import retrieve, format_context
 from agent.knowledge_base.security_bp import SECURITY_BAD_PRACTICES
@@ -8,15 +8,27 @@ from agent.utils.logger import get_logger
 
 log = get_logger(__name__)
 
+_API_ERRORS = (ConnectionError, TimeoutError, OSError)
+
 
 def _invoke(prompt, fallback):
-    try:
-        return llm.invoke(prompt)
-    except ConnectionError as e:
-        if fallback:
-            log.warning("Primary LLM unavailable, trying fallback")
-            return fallback.invoke(prompt)
-        raise
+    with llm_semaphore:
+        try:
+            result = llm.invoke(prompt)
+        except _API_ERRORS as e:
+            if fallback:
+                log.warning("Primary LLM unavailable (%s), trying fallback", e)
+                result = fallback.invoke(prompt)
+            else:
+                raise
+
+    md = getattr(result, "response_metadata", {}) or {}
+    usage = md.get("usage", {}) or {}
+    prompt_tok = int(usage.get("prompt_tokens", 0) or 0)
+    completion_tok = int(usage.get("completion_tokens", 0) or 0)
+    record_tokens(prompt_tok, completion_tok)
+
+    return result
 
 
 @traceable(name="security_chain", run_type="chain")

@@ -54,5 +54,7 @@ jobs:
           REVIEW_CACHE_DIR: .cache/reviews
           PR_MAX_FILES: "50"
           PR_MAX_PATCH_SIZE: "500000"
+          MAX_CONCURRENT_LLM: "5"
+          MAX_DIFF_CHARS: "15000"
         run: |
           python scripts/ci_review.py

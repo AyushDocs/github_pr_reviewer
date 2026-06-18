@@ -17,3 +17,7 @@ class PRState(TypedDict):
     block_review: NotRequired[bool]
     review_degraded: NotRequired[bool]
     pr_too_large: NotRequired[bool]
+    prompt_tokens: NotRequired[int]
+    completion_tokens: NotRequired[int]
+    total_tokens: NotRequired[int]
+    estimated_cost: NotRequired[float]
