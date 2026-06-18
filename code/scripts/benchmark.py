@@ -22,7 +22,6 @@ def main():
     repo_name = sys.argv[1]
     pr_number = int(sys.argv[2])
 
-    timings = {}
     total_start = time.time()
 
     result = app_auto.invoke(

@@ -1,4 +1,5 @@
-\n .venv/
+.venv/
+fresh_venv/
 .idea/
 .vscode/
 __pycache__/
