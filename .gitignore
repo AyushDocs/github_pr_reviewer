@@ -1,0 +1,11 @@
+\n .venv/
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.env
