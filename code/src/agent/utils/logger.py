@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 
@@ -13,5 +14,7 @@ def get_logger(name: str) -> logging.Logger:
             )
         )
         logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+        level_name = os.getenv("REVIEW_LOG_LEVEL", "INFO").upper()
+        level = getattr(logging, level_name, logging.INFO)
+        logger.setLevel(level)
     return logger

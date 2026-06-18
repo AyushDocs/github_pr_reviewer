@@ -177,6 +177,28 @@ python -m tests.harness.runner
 uvicorn api.server:app --reload
 ```
 
+## Per-Repo Configuration
+
+Place a `review_config.json` in the root of your repository to override global defaults:
+
+```json
+{
+  "min_severity": "MEDIUM",
+  "skip_files": ["*.generated.py", "vendor/*", "third_party/*"],
+  "max_files": 30,
+  "max_patch_size": 300000
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `min_severity` | `LOW` | Minimum severity to report (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) |
+| `skip_files` | `[]` | Glob patterns for files to skip during review |
+| `max_files` | `50` | Max files before PR is skipped (env `PR_MAX_FILES` takes priority) |
+| `max_patch_size` | `500000` | Max total patch bytes (env `PR_MAX_PATCH_SIZE` takes priority) |
+
+Env vars always take precedence over the config file.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
@@ -201,6 +223,7 @@ uvicorn api.server:app --reload
 | `SMTP_USER` | No | — | SMTP username |
 | `SMTP_PASS` | No | — | SMTP password (e.g. Gmail App Password) |
 | `SMTP_FROM` | No | `pr-reviewer@example.com` | SMTP sender email |
+| `REVIEW_LOG_LEVEL` | No | `INFO` | Log level: DEBUG, INFO, WARNING, ERROR |
 
 ## Graph Flow Diagram
 

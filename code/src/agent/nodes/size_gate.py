@@ -1,29 +1,31 @@
-import os
+from agent.config_loader import load_config
 from agent.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_MAX_FILES = int(os.getenv("PR_MAX_FILES", "50"))
-_MAX_PATCH_SIZE = int(os.getenv("PR_MAX_PATCH_SIZE", "500000"))
-
 
 def pr_size_gate_node(state):
+    repo_name = state.get("repo_name", "")
+    config = load_config(repo_name) if repo_name else {}
+    max_files = config.get("max_files", 50)
+    max_patch_size = config.get("max_patch_size", 500000)
+
     diffs = state.get("diffs", [])
     total_patch_size = sum(len(d.get("patch", "")) for d in diffs)
 
-    too_many = len(diffs) > _MAX_FILES
-    too_big = total_patch_size > _MAX_PATCH_SIZE
+    too_many = len(diffs) > max_files
+    too_big = total_patch_size > max_patch_size
 
     if too_many or too_big:
         log.warning(
             "PR too large: %s files (limit %s), %s bytes (limit %s)",
-            len(diffs), _MAX_FILES, total_patch_size, _MAX_PATCH_SIZE,
+            len(diffs), max_files, total_patch_size, max_patch_size,
         )
         reasons = []
         if too_many:
-            reasons.append(f"- Files changed: {len(diffs)} (limit: {_MAX_FILES})")
+            reasons.append(f"- Files changed: {len(diffs)} (limit: {max_files})")
         if too_big:
-            reasons.append(f"- Diff size: {total_patch_size:,} bytes (limit: {_MAX_PATCH_SIZE:,})")
+            reasons.append(f"- Diff size: {total_patch_size:,} bytes (limit: {max_patch_size:,})")
         body = (
             "**Review skipped: PR too large**\n\n"
             + "\n".join(reasons)

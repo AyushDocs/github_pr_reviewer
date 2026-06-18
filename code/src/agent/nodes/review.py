@@ -1,3 +1,4 @@
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -5,6 +6,7 @@ from agent.chains.review_chain import review_chain
 from agent.chains.security_chain import security_chain
 from agent.chains.models import parse_review_output
 from agent.config import MAX_CONCURRENT_LLM, MAX_DIFF_CHARS, drain_tokens, estimate_cost
+from agent.config_loader import load_config, matches_skip_pattern
 from agent.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -19,6 +21,7 @@ TRIVIAL_FILENAMES = frozenset({
 })
 
 _MAX_CONTEXT_LINES_PER_HUNK = 3
+_SEVERITY_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 
 
 def _is_trivial(filename: str) -> bool:
@@ -61,6 +64,12 @@ def _truncate_diff(patch: str, max_chars: int) -> str:
     return f"{head}\n\n... [diff truncated to {max_chars} chars] ...\n\n{tail}"
 
 
+def _should_skip(filename: str, skip_patterns: list) -> bool:
+    if _is_trivial(filename):
+        return True
+    return matches_skip_pattern(filename, skip_patterns)
+
+
 def _run_safe(chain_fn, diff, diffs, node_type, filename):
     try:
         raw = diff["patch"]
@@ -76,6 +85,12 @@ def _run_safe(chain_fn, diff, diffs, node_type, filename):
 
 def review_node(state):
     diffs = state["diffs"]
+    repo_name = state.get("repo_name", "")
+    config = load_config(repo_name) if repo_name else {}
+    skip_patterns = config.get("skip_files", [])
+    min_severity = config.get("min_severity", "LOW")
+    min_level = _SEVERITY_ORDER.get(min_severity.upper(), 0)
+
     reviews = []
     security_reviews = []
 
@@ -83,10 +98,10 @@ def review_node(state):
         log.warning("No diffs to review")
         return {"reviews": [], "security_reviews": []}
 
-    filtered = [d for d in diffs if not _is_trivial(d.get("filename", ""))]
+    filtered = [d for d in diffs if not _should_skip(d.get("filename", ""), skip_patterns)]
     skipped = len(diffs) - len(filtered)
     if skipped:
-        log.info("Skipped %s trivial file(s)", skipped)
+        log.info("Skipped %s trivial/configured file(s)", skipped)
 
     if not filtered:
         log.warning("No non-trivial diffs to review")
@@ -110,8 +125,8 @@ def review_node(state):
             else:
                 security_reviews.append(entry)
 
-    reviews = _filter_low_severity(reviews, "code review")
-    security_reviews = _filter_low_severity(security_reviews, "security review")
+    reviews = _filter_low_severity(reviews, "code review", min_level)
+    security_reviews = _filter_low_severity(security_reviews, "security review", min_level)
 
     total_attempted = len(filtered) * 2
     degraded = bool(filtered) and not reviews and not security_reviews
@@ -139,15 +154,17 @@ def review_node(state):
     return result
 
 
-def _filter_low_severity(entries: list, label: str) -> list:
+def _filter_low_severity(entries: list, label: str, min_level: int = 0) -> list:
     kept = []
     dropped = 0
     for e in entries:
         parsed = parse_review_output(e["review"])
-        if parsed and parsed.severity == "LOW":
-            dropped += 1
-            continue
+        if parsed:
+            sev = _SEVERITY_ORDER.get(parsed.severity.upper(), 0)
+            if sev < min_level:
+                dropped += 1
+                continue
         kept.append(e)
     if dropped:
-        log.info("Filtered out %s LOW severity %s findings", dropped, label)
+        log.info("Filtered out %s finding(s) below min severity level %s", dropped, min_level)
     return kept
