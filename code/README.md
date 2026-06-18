@@ -1,6 +1,6 @@
 # GitHub PR Reviewer
 
-Multi-agentic PR reviewer using LangGraph that runs as both a local CLI with human approval and a CI/GitHub Actions pipeline with email notifications.
+**Multi-agentic, multi-RAG, graph-based PR review engine** — parallel code + security reviewers powered by hybrid search retrieval, guarded by jailbreak detection, hallucination validation, and quality gates, with configurable CI/CD deployment and per-repo policy.
 
 ## Architecture
 
