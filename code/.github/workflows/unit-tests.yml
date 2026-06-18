@@ -58,3 +58,6 @@ jobs:
         run: |
           uv pip install pytest
           uv run pytest tests/unit_tests
+      - name: Run harness regression tests
+        run: |
+          uv run pytest tests/harness/test_harness.py -v

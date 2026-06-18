@@ -1,8 +1,3 @@
-"""New LangGraph Agent.
+from agent.graph import app, app_auto, graph
 
-This module defines a custom graph.
-"""
-
-from agent.graph import graph
-
-__all__ = ["graph"]
+__all__ = ["app", "app_auto", "graph"]

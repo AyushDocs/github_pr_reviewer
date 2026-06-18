@@ -1,14 +1,7 @@
-import os
-from github import Github,Auth
+from github import Github, Auth
+from agent.config import GITHUB_TOKEN
 
-
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-auth=Auth.Token(GITHUB_TOKEN)
-
-if not GITHUB_TOKEN:
-    raise ValueError("Github token is needed")
-
-gh = Github(auth=auth)
+gh = Github(auth=Auth.Token(GITHUB_TOKEN))
 
 
 def get_repo(repo_name: str):
@@ -22,13 +15,11 @@ def get_pr(repo_name: str, pr_number: int):
 
 def get_pr_files(repo_name: str, pr_number: int):
     pr = get_pr(repo_name, pr_number)
-
     files = []
     diffs = []
 
     for file in pr.get_files():
         files.append(file.filename)
-
         if file.patch:
             diffs.append(
                 {"filename": file.filename, "patch": file.patch, "status": file.status}
@@ -42,6 +33,24 @@ def post_pr_comment(repo_name: str, pr_number: int, comment: str):
     pr.create_issue_comment(comment)
 
 
-if __name__ == "__main__":
-    repo = get_repo("AyushDocs/pr-review-agent-lab")
-    print(repo)
+def get_latest_commit(repo_name: str, pr_number: int):
+    pr = get_pr(repo_name, pr_number)
+    return list(pr.get_commits())[-1]
+
+
+def post_review_comments(repo_name: str, pr_number: int, file_comments: list):
+    pr = get_pr(repo_name, pr_number)
+    commit = get_latest_commit(repo_name, pr_number)
+    comments = [
+        {
+            "body": fc["body"],
+            "path": fc["path"],
+            "subject_type": "file",
+        }
+        for fc in file_comments
+    ]
+    pr.create_review(
+        commit=commit,
+        comments=comments,
+        event="COMMENT",
+    )

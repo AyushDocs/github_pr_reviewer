@@ -1,0 +1,58 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Compute diff hash for caching
+        id: diff-hash
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD | sha256sum | cut -d' ' -f1 > /tmp/diff_hash.txt
+          echo "hash=$(cat /tmp/diff_hash.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache LLM review results
+        uses: actions/cache@v4
+        with:
+          path: .cache/reviews
+          key: reviews-${{ steps.diff-hash.outputs.hash }}
+          restore-keys: |
+            reviews-
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+
+      - name: Run AI PR Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGCHAIN_TRACING_V2: "true"
+          LANGCHAIN_PROJECT: pr-reviewer
+          REVIEW_CACHE_DIR: .cache/reviews
+          PR_MAX_FILES: "50"
+          PR_MAX_PATCH_SIZE: "500000"
+        run: |
+          python scripts/ci_review.py
